@@ -8,9 +8,8 @@ Ver 2.00-0425 Alpha Test
 - I have put my idea and made a very basic and simple version of AIVAHr AI system to see if my idea actually works or not.
 - It includes implementation of:
   1) Langchain as framework
-  2) MiniCPM-o 2.6 as LLM
+  2) Phi4-mini as LLM
   3) SQLite as memory
-  4) OpenAI Whisper as voice input
   5) etc.
 
 To run it, needs to install all the dependencies.
