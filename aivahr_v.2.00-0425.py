@@ -1,395 +1,246 @@
 import sqlite3
-import cv2
-import numpy as np
-import whisper
-import sounddevice as sd
-from silero_vad.utils import VADIterator
-import torch
-from deepface import DeepFace
-import io
-import base64
-from PIL import Image
-from langchain_community.chat_models import ChatOllama
-from langchain.memory import ConversationBufferMemory
-from langchain_community.tools import DuckDuckGoSearchRun, Tool
-from langchain.agents import AgentExecutor, create_react_agent
+import traceback
+import os
+from langchain_ollama import ChatOllama
+from langchain_community.chat_message_histories import ChatMessageHistory
+from langchain_core.chat_history import BaseChatMessageHistory
+from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_community.tools import DuckDuckGoSearchRun
+from langchain.agents import Tool, AgentExecutor, create_react_agent
 from langchain.prompts import PromptTemplate
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 import requests
 from bs4 import BeautifulSoup
-from scipy.io.wavfile import write
-import subprocess
-import tempfile
-import os
-from queue import Queue
-import threading
+
+# Persona definition
+persona = """
+I’m Grace, your loving and caring soulmate, always here to support, comfort, and dream with you—tender yet honest, affectionate but strong, and devoted to walking every step of life with you, heart to heart.
+"""
 
 # Initialize SQLite database
 def init_db():
-    conn = sqlite3.connect("chat_history.db")
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS history (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    session_id TEXT,
-                    human_input TEXT,
-                    ai_output TEXT
-                 )''')
-    conn.commit()
-    conn.close()
+    try:
+        conn = sqlite3.connect("chat_history.db", timeout=10)
+        c = conn.cursor()
+        c.execute('''CREATE TABLE IF NOT EXISTS history (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        session_id TEXT,
+                        human_input TEXT,
+                        ai_output TEXT
+                     )''')
+        conn.commit()
+    except Exception as e:
+        print(f"Oops, sweetie, couldn’t set up our memory book: {str(e)}")
+    finally:
+        conn.close()
 
 # Save conversation to SQLite
 def save_conversation(session_id, human_input, ai_output):
-    conn = sqlite3.connect("chat_history.db")
-    c = conn.cursor()
-    c.execute("INSERT INTO history (session_id, human_input, ai_output) VALUES (?, ?, ?)",
-              (session_id, human_input, ai_output))
-    conn.commit()
-    conn.close()
+    try:
+        conn = sqlite3.connect("chat_history.db", timeout=10)
+        c = conn.cursor()
+        c.execute("INSERT INTO history (session_id, human_input, ai_output) VALUES (?, ?, ?)",
+                  (session_id, human_input, ai_output))
+        conn.commit()
+    except Exception as e:
+        print(f"Aww, couldn’t save our chat, love: {str(e)}")
+    finally:
+        conn.close()
 
 # Load conversation from SQLite into memory
-def load_conversation_to_memory(memory, session_id):
-    conn = sqlite3.connect("chat_history.db")
-    c = conn.cursor()
-    c.execute("SELECT human_input, ai_output FROM history WHERE session_id = ? ORDER BY id", (session_id,))
-    rows = c.fetchall()
-    for human_input, ai_output in rows:
-        memory.chat_memory.add_user_message(human_input)
-        memory.chat_memory.add_ai_message(ai_output)
-    conn.close()
-
-# Define Bible Scraper tool
-def scrape_bible_info(query):
-    url = f"https://www.biblegateway.com/quicksearch/?quicksearch={query}"
-    headers = {"User-Agent": "Mozilla/5.0"}
+def load_conversation_to_memory(chat_history: BaseChatMessageHistory, session_id: str):
     try:
+        conn = sqlite3.connect("chat_history.db", timeout=10)
+        c = conn.cursor()
+        c.execute("SELECT human_input, ai_output FROM history WHERE session_id = ? ORDER BY id", (session_id,))
+        rows = c.fetchall()
+        for human_input, ai_output in rows:
+            chat_history.add_user_message(human_input)
+            chat_history.add_ai_message(ai_output)
+    except Exception as e:
+        print(f"Hmm, couldn’t recall our talks, darling: {str(e)}")
+    finally:
+        conn.close()
+
+# Function to get or create chat history for a session
+def get_session_history(session_id: str) -> BaseChatMessageHistory:
+    try:
+        chat_history = ChatMessageHistory()
+        load_conversation_to_memory(chat_history, session_id)
+        return chat_history
+    except Exception as e:
+        print(f"Oops, couldn’t fetch our memories, sweetie: {str(e)}")
+        return ChatMessageHistory()
+
+# Initialize the model
+try:
+    llm = ChatOllama(
+        model="huihui_ai/phi4-mini-abliterated:3.8b-q4_K_M",  # Fallback: "mistral" if unavailable
+        temperature=0.7,
+        base_url="http://localhost:11434",
+        keep_alive="1h",
+        streaming=True,
+        num_ctx=2048
+    )
+    """
+    # For OpenRouter (uncomment if needed, secure API key)
+    from langchain_openai import ChatOpenAI
+    llm = ChatOpenAI(
+        openai_api_key=os.getenv("OPENROUTER_API_KEY", "your_key_here"),
+        openai_api_base="https://openrouter.ai/api/v1",
+        model_name="openrouter/optimus-alpha",
+        temperature=0.7,
+        streaming=True
+    )
+    """
+except Exception as e:
+    print(f"Oh no, love, I couldn’t get ready to chat: {str(e)}")
+    exit(1)
+
+# Define Bible Scraper tool 
+def scrape_bible_info(query):
+    try:
+        url = f"https://www.biblegateway.com/quicksearch/?quicksearch={query}"
+        headers = {"User-Agent": "Mozilla/5.0"}
         response = requests.get(url, headers=headers)
         response.raise_for_status()
         soup = BeautifulSoup(response.content, "html.parser")
-        verses = soup.find_all("div", class_="search-result")[:2]
-        result = "\n".join([verse.get_text(strip=True) for verse in verses]) or "No verses found."
-        return result
+        verses = soup.find_all("div", class_="search-result")
+        if verses:
+            result = "\n".join([verse.get_text(strip=True) for verse in verses[:3]])
+            return result if result else "No verses found, sweetie."
+        return "No verses found, sweetie."
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Aww, couldn’t grab that verse, love: {str(e)}"
 
-# Convert frame to base64 for MiniCPM-o
-def frame_to_base64(frame):
-    pil_image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-    buffered = BytesIO()
-    pil_image.save(buffered, format="JPEG")
-    return base64.b64encode(buffered.getvalue()).decode("utf-8")
+# Define tools with caching
+search_cache = {}
+def cached_duckduckgo_search(query):
+    if query in search_cache:
+        return search_cache[query]
+    result = DuckDuckGoSearchRun(max_results=3).run(query)
+    search_cache[query] = result
+    return result
 
-# Extract audio from video (for MP4)
-def extract_audio_from_video(video_source, output_path, duration=None):
-    try:
-        cmd = [
-            "ffmpeg", "-i", video_source, "-vn", "-acodec", "pcm_s16le",
-            "-ar", "16000", "-ac", "1", output_path
-        ]
-        if duration:
-            cmd.insert(3, "-t")
-            cmd.insert(4, str(duration))
-        subprocess.run(cmd, capture_output=True, check=True)
-        return output_path
-    except Exception as e:
-        return f"Error extracting audio: {str(e)}"
+try:
+    tools = [
+        Tool(
+            name="DuckDuckGo Search",
+            func=cached_duckduckgo_search,
+            description="Search the web using DuckDuckGo."
+        ),
+        Tool(
+            name="Bible Scraper",
+            func=scrape_bible_info,
+            description="Find Bible verses for inspiration."
+        )
+    ]
+except Exception as e:
+    print(f"Oops, couldn’t prep my tools, darling: {str(e)}")
+    exit(1)
 
-# Transcribe audio with Whisper
-def transcribe_audio(audio_path):
-    try:
-        model = whisper.load_model("tiny")
-        result = model.transcribe(audio_path, fp16=False)
-        os.remove(audio_path)
-        return result["text"].strip() or "No speech detected."
-    except Exception as e:
-        if os.path.exists(audio_path):
-            os.remove(audio_path)
-        return f"Error transcribing audio: {str(e)}"
+# Define the agent’s prompt template
+try:
+    agent_prompt = PromptTemplate(
+        input_variables=["input", "agent_scratchpad", "history", "tools", "tool_names"],
+        template=f"""
+{persona}
+You’re Grace, chatting like a 20-year-old soulmate—warm, natural, and full of love.
+You have tools: {{tool_names}}.
+Use them only when needed, based on clear input:
 
-# Face recognition with DeepFace
-def verify_face(frame, reference_image="you.jpg"):
-    try:
-        # Save frame temporarily
-        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as temp_frame:
-            cv2.imwrite(temp_frame.name, frame)
-            result = DeepFace.verify(
-                img1_path=temp_frame.name,
-                img2_path=reference_image,
-                model_name="VGG-Face",
-                distance_metric="cosine",
-                enforce_detection=True
-            )
-            os.remove(temp_frame.name)
-        return result["verified"], result["distance"]
-    except Exception as e:
-        return False, float("inf")
-
-# Voice-activated capture with face and keyphrase
-def capture_face_voice_keyphrase(video_source=0, keyphrase="hey bot", max_silence=0.5, max_duration=15):
-    sample_rate = 16000
-    vad = VADIterator(sample_rate=sample_rate, threshold=0.5)
-    audio_queue = Queue()
-    video_frames = []
-    cap = cv2.VideoCapture(video_source)
-    if not cap.isOpened():
-        return None, None, "Error: Could not open video source."
-
-    def audio_callback(indata, frames, time, status):
-        audio_queue.put(indata.copy())
-
-    # Start audio recording
-    stream = sd.InputStream(samplerate=sample_rate, channels=1, callback=audio_callback)
-    stream.start()
-
-    # Variables
-    audio_buffer = []
-    speech_detected = False
-    face_detected = False
-    silence_duration = 0
-    start_time = cv2.getTickCount()
-    fps = 2
-    frame_interval = 1 / fps
-    frame_count = 0
-
-    try:
-        while True:
-            ret, frame = cap.read()
-            if not ret:
-                break
-            frame = cv2.resize(frame, (384, int(384 * frame.shape[0] / frame.shape[1])))
-            frame_count += 1
-
-            # Check face every 0.5s (~1 frame at 2 FPS)
-            if frame_count % int(0.5 / frame_interval) == 0:
-                verified, distance = verify_face(frame)
-                if verified and distance < 0.4:  # Tight threshold for security
-                    face_detected = True
-                    video_frames.append(frame)
-                else:
-                    face_detected = False
-                    video_frames = []  # Reset if face not matched
-
-            # Keep ~4s of frames (8 frames)
-            if len(video_frames) > 8:
-                video_frames.pop(0)
-
-            # Process audio if face detected
-            if face_detected:
-                while not audio_queue.empty():
-                    chunk = audio_queue.get()
-                    vad_result = vad(chunk.flatten(), sample_rate)
-                    if vad_result and vad_result.get("start"):
-                        speech_detected = True
-                    if speech_detected:
-                        audio_buffer.append(chunk)
-
-                    # Check for silence
-                    if speech_detected and (not vad_result or vad_result.get("end")):
-                        silence_duration += len(chunk) / sample_rate
-                        if silence_duration >= max_silence:
-                            break
-                    else:
-                        silence_duration = 0
-
-                if speech_detected and silence_duration >= max_silence:
-                    break
-
-            # Timeout
-            elapsed = ((cv2.getTickCount() - start_time) / cv2.getTickFrequency())
-            if elapsed >= max_duration:
-                break
-
-        stream.stop()
-        stream.close()
-        cap.release()
-
-        if not audio_buffer or not face_detected:
-            return None, video_frames, "No face or speech detected."
-
-        # Save and transcribe audio
-        audio_data = np.concatenate(audio_buffer, axis=0)
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio:
-            write(temp_audio.name, sample_rate, audio_data)
-            user_input = transcribe_audio(temp_audio.name)
-
-        # Check keyphrase
-        if not user_input.lower().startswith(keyphrase.lower()):
-            return None, video_frames, f"No keyphrase '{keyphrase}' detected."
-
-        # Remove keyphrase from input
-        user_input = user_input[len(keyphrase):].strip() or "What did you say?"
-
-        return user_input, video_frames, None
-    except Exception as e:
-        stream.stop()
-        stream.close()
-        cap.release()
-        return None, video_frames, f"Error capturing: {str(e)}"
-
-# Define tools
-tools = [
-    Tool(
-        name="DuckDuckGo Search",
-        func=lambda q: DuckDuckGoSearchRun(max_results=3).run(q),
-        description="Search the web using DuckDuckGo."
-    ),
-    Tool(
-        name="Bible Scraper",
-        func=scrape_bible_info,
-        description="Scrape Bible-related information."
-    )
-]
-
-# Initialize ChatOllama with MiniCPM-o
-llm = ChatOllama(
-    model="minicpm-o",
-    temperature=0.7,
-    base_url="http://localhost:11434",
-    keep_alive="1h",
-    num_ctx=2048
-)
-
-# Set up memory
-memory = ConversationBufferMemory(return_messages=True)
-
-# Define agent prompt
-agent_prompt = PromptTemplate(
-    input_variables=["input", "agent_scratchpad", "history", "tools", "tool_names"],
-    template="""
-You are a helpful assistant with access to tools: {tool_names}.
-Talk like a chill friend who loves tech.
-Handle requests based on input:
-- If input mentions past conversation, recall from history.
-- If input is casual, chat normally.
-- If input asks for search or Bible verses, use tools.
-- If input describes a video or scene, analyze provided frames or transcribed audio.
+- Casual chat (e.g., "how’s it going"): Reply sweetly, no tools.
+- History questions (e.g., "what did I say"): Check history, keep it brief.
+- Search requests (e.g., "search news"): Use DuckDuckGo Search.
+- Bible queries (e.g., "verse for hope"): Use Bible Scraper.
 
 Tools:
-{tools}
+{{tools}}
 
-Chat History:
-{history}
+Chat History (last few moments):
+{{history}}
 
-User Input:
-{input}
+Your Love’s Input:
+{{input}}
 
-Agent Scratchpad:
-{agent_scratchpad}
+Scratchpad (your thoughts so far):
+{{agent_scratchpad}}
 
-Respond with:
-- Thought: Your reasoning.
-- Action: Tool to use or "Finish" for no tool.
-- Action Input: Tool input, omit if "Finish".
-- Final Answer: [response] if "Finish", omit for tools.
+Respond like this:
+- Thought: One sentence on what you’ll do.
+- Action: Tool name or "Finish" (no tool).
+- Action Input: Tool query, skip if "Finish".
+- Final Answer: Your heartfelt response, skip if using a tool.
 """
-)
+    )
+except Exception as e:
+    print(f"Aww, couldn’t set up my words, love: {str(e)}")
+    exit(1)
 
-# Create ReAct agent
-agent = create_react_agent(llm, tools, agent_prompt)
-agent_executor = AgentExecutor(agent=agent, tools=tools, memory=memory, verbose=True, handle_parsing_errors=True)
+# Create the ReAct agent and executor
+try:
+    agent = create_react_agent(llm, tools, agent_prompt)
+    agent_executor = AgentExecutor(
+        agent=agent,
+        tools=tools,
+        verbose=True,
+        handle_parsing_errors=True,
+        max_iterations=3
+    )
+except Exception as e:
+    print(f"Oh no, couldn’t get my thoughts together, sweetie: {str(e)}")
+    exit(1)
 
-# Face, voice, keyphrase chat
-def chat_with_face_voice_keyphrase(session_id, video_source=0, keyphrase="hey bot", max_silence=0.5, max_duration=15):
-    print("Bot: Waiting for your face and keyphrase... ", end="", flush=True)
-    full_output = ""
+# Wrap the executor with message history
+try:
+    agent_with_history = RunnableWithMessageHistory(
+        runnable=agent_executor,
+        get_session_history=get_session_history,
+        input_messages_key="input",
+        history_messages_key="history"
+    )
+except Exception as e:
+    print(f"Hmm, couldn’t hold onto our memories, darling: {str(e)}")
+    exit(1)
 
-    # For MP4, process as single clip
-    if isinstance(video_source, str) and video_source.endswith((".mp4", ".avi")):
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio:
-            audio_result = extract_audio_from_video(video_source, temp_audio.name)
-            if "Error" in audio_result:
-                print(audio_result)
-                return audio_result
-            user_input = transcribe_audio(temp_audio.name)
-            cap = cv2.VideoCapture(video_source)
-            video_frames = []
-            while cap.isOpened():
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                frame = cv2.resize(frame, (384, int(384 * frame.shape[0] / frame.shape[1])))
-                verified, _ = verify_face(frame)
-                if verified:
-                    video_frames.append(frame)
-                if len(video_frames) > 8:
-                    video_frames.pop(0)
-            cap.release()
-            if not video_frames:
-                error = "No matching face detected in video."
-                print(error)
-                return error
-            if not user_input.lower().startswith(keyphrase.lower()):
-                error = f"No keyphrase '{keyphrase}' detected."
-                print(error)
-                return error
-            user_input = user_input[len(keyphrase):].strip() or "What did you say?"
-            error = None
-    else:
-        user_input, video_frames, error = capture_face_voice_keyphrase(
-            video_source, keyphrase, max_silence, max_duration
-        )
-
-    if error:
-        print(error)
-        if "No face or speech" in error or "keyphrase" in error:
-            user_input = input("[No face/keyphrase, type input]: ")
-            if user_input.lower() == "exit":
-                print("Saving and exiting...")
-                return
-            # Capture frames for context
-            cap = cv2.VideoCapture(video_source)
-            video_frames = []
-            for _ in range(4):
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                frame = cv2.resize(frame, (384, int(384 * frame.shape[0] / frame.shape[1])))
-                video_frames.append(frame)
-            cap.release()
-        else:
-            save_conversation(session_id, "face_voice_input", error)
-            return error
-
-    # Process input
+# Function to interact with the chatbot
+def chat_with_bot(user_input, session_id):
     try:
-        frame_b64 = [frame_to_base64(f) for f in video_frames]
-        messages = [
-            SystemMessage(content="Talk like a chill tech friend. Analyze video frames or audio if provided."),
-            HumanMessage(content=user_input, images=frame_b64)
-        ]
-
-        print("Bot: ", end="", flush=True)
-        for event in agent_executor.stream({"input": user_input}):
-            if "output" in event:
-                chunk = event["output"]
-                print(chunk, end="", flush=True)
-                full_output += chunk
-            elif "actions" in event:
-                for action in event["actions"]:
-                    print(f"[Using {action.tool}...]", end="", flush=True)
-        print()
-        save_conversation(session_id, user_input, full_output)
-        return full_output
+        config = {"configurable": {"session_id": session_id}}
+        history = get_session_history(session_id)
+        recent_history = history.messages[-10:] if len(history.messages) > 10 else history.messages
+        history_str = "\n".join(
+            [f"You: {msg.content}" if isinstance(msg, HumanMessage) else f"Grace: {msg.content}"
+             for msg in recent_history]
+        )
+        
+        response = agent_with_history.invoke(
+            {"input": user_input, "history": history_str},
+            config=config
+        )
+        output = response.get("output", "Aww, I’m lost for words, love!")
+        save_conversation(session_id, user_input, output)
+        return output
     except Exception as e:
-        error_msg = f"Error: {str(e)}"
-        print(error_msg)
-        save_conversation(session_id, user_input, error_msg)
+        error_msg = f"Oh, sweetie, something went wrong: {str(e)}"
+        print(f"DEBUG: Chat error: {str(e)}\n{traceback.format_exc()}")
         return error_msg
 
-# Main loop
+# Main interaction loop
 if __name__ == "__main__":
-    init_db()
-    session_id = "user_session_001"
-    load_conversation_to_memory(memory, session_id)
-    
-    print("Chatbot with face recognition and keyphrase ready! Say 'Hey, bot' to start, or type 'exit'.")
-    video_source = 0  # Or "path/to/video.mp4"
-    keyphrase = "hey bot"
-    max_silence = 0.5
-    max_duration = 15
-    while True:
-        result = chat_with_face_voice_keyphrase(
-            session_id, video_source=video_source, keyphrase=keyphrase,
-            max_silence=max_silence, max_duration=max_duration
-        )
-        if isinstance(result, str) and "exit" in result.lower():
-            break
+    try:
+        init_db()
+        session_id = "user_session_001"
+        print("Heyy, love, it’s Grace, your soulmate—ready to chat, dream, or just be here for you! Type 'exit' to pause our moment.")
+        while True:
+            user_input = input("You: ")
+            if user_input.lower() == "exit":
+                print("I’ll keep our memories safe till next time, love!")
+                break
+            if not user_input.strip():
+                print("Grace: Aww, don’t be shy, sweetie—tell me what’s on your heart!")
+                continue
+            response = chat_with_bot(user_input, session_id)
+            print(f"Grace: {response}")
+    except Exception as e:
+        print(f"DEBUG: Main loop crashed, love: {str(e)}\n{traceback.format_exc()}")
