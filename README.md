@@ -106,6 +106,7 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 
 ![17446590638827556901903940638844](https://github.com/user-attachments/assets/d2a68750-cd64-4fbc-ba8e-b37b289df2a0)
 
+```mermaid
 sequenceDiagram
     participant User
     participant AIVAHr
@@ -130,7 +131,7 @@ sequenceDiagram
     AIVAHr->>Ollama: Chat request (with tool outputs)
     Ollama-->>AIVAHr: Final Response
     AIVAHr->>User: Response
-
+```
 
 ## Previous Version: (Using Langchain framework)
 
