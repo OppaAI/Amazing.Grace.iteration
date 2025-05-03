@@ -106,6 +106,31 @@ This project is licensed under the GNU General Public License v3.0 - see the [LI
 
 ![17446590638827556901903940638844](https://github.com/user-attachments/assets/d2a68750-cd64-4fbc-ba8e-b37b289df2a0)
 
+sequenceDiagram
+    participant User
+    participant AIVAHr
+    participant Ollama
+    participant DuckDuckGo
+    participant WeatherAPI
+    participant AuroraAPI
+
+    User->>AIVAHr: Input Prompt
+    AIVAHr->>Ollama: Chat request (with tools)
+    Ollama-->>AIVAHr: Tool call (e.g., duckduckgo_search)
+    alt Tool is DuckDuckGo Search
+        AIVAHr->>DuckDuckGo: Search Query
+        DuckDuckGo-->>AIVAHr: Search Results
+    else Tool is Weather API
+        AIVAHr->>WeatherAPI: Request Weather Data
+        WeatherAPI-->>AIVAHr: Weather Data
+    else Tool is Aurora API
+        AIVAHr->>AuroraAPI: Request Aurora Data
+        AuroraAPI-->>AIVAHr: Aurora Data
+    end
+    AIVAHr->>Ollama: Chat request (with tool outputs)
+    Ollama-->>AIVAHr: Final Response
+    AIVAHr->>User: Response
+
 
 ## Previous Version: (Using Langchain framework)
 
