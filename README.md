@@ -28,7 +28,7 @@ AIVAHr is an AI companion designed to provide an engaging virtual presence. This
 1.  Clone the repository:
 
     ```bash
-    git clone <repository_url>
+    git clone https://github.com/OppaAI/Project-AIVAHr.git
     cd oppaai-project-aivahr
     ```
 2.  Create a virtual environment (recommended):
