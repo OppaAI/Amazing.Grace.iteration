@@ -81,7 +81,7 @@ Once the script is running, you can interact with AIVAHr by typing in your input
 ## Dependencies
 
 *   [ollama](https://github.com/jmorganca/ollama): Go framework for run and manage LLMs.
-*   [duckduckgo\_search](https://github.com/ пошукай-кожний/duckduckgo_search): Library for searching DuckDuckGo.
+*   [duckduckgo_search](https://github.com/deedy5/duckduckgo_search): Library for searching DuckDuckGo.
 *   [geopy](https://geopy.readthedocs.io/en/stable/): Library for geocoding.
 *   [requests](https://requests.readthedocs.io/en/latest/): Library for making HTTP requests.
 
