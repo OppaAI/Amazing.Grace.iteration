@@ -32,8 +32,8 @@ GRACE is an AI companion designed to provide an engaging virtual presence. This 
 1.  Clone the repository:
 
     ```bash
-    git clone https://github.com/OppaAI/Project-AIVAHr.git
-    cd oppaai-amazing.grace.iteration
+    git clone [https://github.com/OppaAI/AGi.git]
+    cd AGi
     ```
 2.  Create a virtual environment (recommended):
 
