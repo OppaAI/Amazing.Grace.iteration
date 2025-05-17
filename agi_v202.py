@@ -338,6 +338,7 @@ async def process_input(user_input: str):
     print("")
 
 async def main():
+    print("🤖 Welcome to AGi alpha test v.2.02-050325"
     print("Please enter your prompt. Type 'exit' or 'quit' to quit.")
     while True:
         user_input = input("☺️  You: ")
