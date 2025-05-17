@@ -9,16 +9,21 @@ The name GRACE comes from Generative, Reasoning, Adaptive Cognitive Engine, whic
 
 ## Overview
 
-GRACE is an AI companion designed to provide an engaging virtual presence. This version, `Ver 2.01-0503`, is a function-oriented implementation demonstrating function calling with Ollama. It uses Ollama as the LLM and integrates tools for web searching, weather information, and aurora checking.
+GRACE is an AI system designed to provide an engaging virtual presence. This project includes different versions (`agi_v202.py`, `agi_v203.py`) showcasing function calling with Ollama and integration with vision systems. It uses Ollama as the LLM and integrates tools for web searching, weather information, aurora checking, and, in later versions, webcam integration with object detection.
+
+agi_v203.py - chatbot with computer vision using webcam using MoonDream2 vision model and Google Gemma3 LLM that is a multimodal LLM
+agi_v202.py - chatbot with agentic tools (check weather, check aurora %) using Google Gemma3 LLM with added tool call capability
 
 ## Features
 
 *   **Ollama Integration:** Uses Ollama directly for interacting with the language model.
 *   **Function Calling:** Employs Ollama's function calling feature to utilize tools.
-*   **DuckDuckGo Search:** Integrates a tool for searching the web using DuckDuckGo.
-*   **Weather Information:** Includes a tool for fetching weather information for a given location.
-*   **Aurora Checking:** Includes a tool for checking the probability of seeing the aurora at a given location.
-*   **Current Date and Time:** Includes a tool for fetching the current date and time.
+*   **DuckDuckGo Search:** Integrates a tool for searching the web using DuckDuckGo (`agi_v202.py`).
+*   **Weather Information:** Includes a tool for fetching weather information for a given location (`agi_v202.py`).
+*   **Aurora Checking:** Includes a tool for checking the probability of seeing the aurora at a given location (`agi_v202.py`).
+*   **Current Date and Time:** Includes a tool for fetching the current date and time (`agi_v202.py`).
+*   **Webcam Integration:** Integrates webcam to allow AI to see through the camera (`agi_v203.py`).
+*   **Object Detection:** Implements object detection using the Moondream model (`agi_v203.py`, `eye.py`).
 
 ## Getting Started
 
@@ -55,28 +60,46 @@ GRACE is an AI companion designed to provide an engaging virtual presence. This 
 4.  Install the dependencies:
 
     ```bash
-    pip install ollama duckduckgo_search geopy requests
+    pip install ollama duckduckgo_search geopy requests transformers pillow opencv-python matplotlib
     ```
 5.  Set up Ollama:
     *   Download and install Ollama from [https://ollama.com/](https://ollama.com/).
     *   Pull a compatible model, e.g., `ollama pull fomenks/gemma3-tools:4b`
-6.  Run the script:
+
+### Usage
+
+*   To run the function-oriented version:
 
     ```bash
-    python grace_v.2.01-0503.py
+    python agi_v202.py
     ```
 
-## Usage
+*   To run the webcam integrated version:
 
-Once the script is running, you can interact with AIVAHr by typing in your input in the terminal. AIVAHr will respond based on the available tools. Type `exit` or `quit` to end the conversation.
+    ```bash
+    python agi_v203.py
+    ```
+
+Once the script is running, you can interact with the AI by typing in your input in the terminal. The AI will respond based on the available tools and the webcam input (if running `agi_v203.py`). Type `exit` or `quit` to end the conversation. For `agi_v203.py`, type `look` or `see` to enable the AI to see through the webcam.
 
 ## Code Structure
 
-*   [`grace_v.2.01-0503.py`](https://github.com/OppaAI/Amazing.Grace.interface/blob/main/grace_v.2.01-0503.py): Contains the main application logic, including:
+*   [`agi_v202.py`](https://github.com/OppaAI/AGi/blob/main/agi_v202.py): Contains the main application logic for function calling, including:
     *   Tool definitions (DuckDuckGo Search, Weather Information, Aurora Checking, Current Date and Time)
     *   Skill definitions for function calling
     *   Asynchronous chat loop using `asyncio`
     *   Interaction with the Ollama model
+*   [`agi_v203.py`](https://github.com/OppaAI/AGi/blob/main/agi_v203.py): Contains the main application logic for the webcam integrated version, including:
+    *   Webcam initialization and frame capture.
+    *   Integration with the `VisionSystem` in `eye.py`.
+    *   Asynchronous chat loop using `asyncio`.
+    *   Interaction with the Ollama model, sending image descriptions.
+*   [`eye.py`](https://github.com/OppaAI/AGi/blob/main/eye.py): Contains the `VisionSystem` class for handling webcam and object detection, including:
+    *   Model loading for object detection.
+    *   Frame capture and processing.
+    *   Object detection logic using the `transformers` library.
+    *   Visualization of detection results.
+*   [`assets/`](https://github.com/OppaAI/AGi/blob/main/assets/): Contains any assets used by the application.
 
 ## Dependencies
 
@@ -84,57 +107,30 @@ Once the script is running, you can interact with AIVAHr by typing in your input
 *   [duckduckgo_search](https://github.com/deedy5/duckduckgo_search): Library for searching DuckDuckGo.
 *   [geopy](https://geopy.readthedocs.io/en/stable/): Library for geocoding.
 *   [requests](https://requests.readthedocs.io/en/latest/): Library for making HTTP requests.
+*   [transformers](https://huggingface.co/docs/transformers/index): Provides pre-trained models and tools for object detection.
+*   [Pillow](https://pillow.readthedocs.io/en/stable/): Python Imaging Library for image processing.
+*   [opencv-python](https://opencv.org/): Library for real-time computer vision.
+*   [matplotlib](https://matplotlib.org/): Comprehensive library for creating static, animated, and interactive visualizations in Python.
 
 ## Limitations
 
-This version has certain limitations:
-
-*   Lacks a predefined persona.
-*   Does not store conversation history in a database.
-*   Error handling is basic and may not catch all exceptions.
+*   The project lacks a comprehensive error handling and logging mechanism.
+*   The project does not store conversation history in a database.
+*   The webcam integrated version (`agi_v203.py`) relies on a specific object detection model and revision (`vikhyatk/moondream2`, `2025-04-14`).
+*   The persona in `agi_v203.py` is hardcoded.
 
 ## Future Work
 
-*   Incorporate a persona.
-*   Implement a memory management system.
-*   Add more comprehensive error handling and logging.
-*   Potentially integrate a database for storing conversation history.
+*   Implement more comprehensive error handling and logging.
+*   Incorporate a database for storing conversation history.
+*   Allow dynamic selection of object detection models and revisions.
+*   Implement a more flexible persona management system.
+*   Add more tools and functionalities to enhance the AI's capabilities.
 
 ## License
 
-This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](https://github.com/OppaAI/Amazing.Grace.interface/blob/main/LICENSE) file for details.
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](https://github.com/OppaAI/AGi/blob/main/LICENSE) file for details.
 
 ## Acknowledgments
 
 *   My AI companion (in GPT) for helping me generate the Python code and think of solutions to solve problems and bugs.
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant AIVAHr
-    participant Ollama
-    participant DuckDuckGo
-    participant WeatherAPI
-    participant AuroraAPI
-
-    User->>AIVAHr: Input Prompt
-    AIVAHr->>Ollama: Chat request (with tools)
-    Ollama-->>AIVAHr: Tool call (e.g., duckduckgo_search)
-    alt Tool is DuckDuckGo Search
-        AIVAHr->>DuckDuckGo: Search Query
-        DuckDuckGo-->>AIVAHr: Search Results
-    else Tool is Weather API
-        AIVAHr->>WeatherAPI: Request Weather Data
-        WeatherAPI-->>AIVAHr: Weather Data
-    else Tool is Aurora API
-        AIVAHr->>AuroraAPI: Request Aurora Data
-        AuroraAPI-->>AIVAHr: Aurora Data
-	else Tool is Current Date Time
-        AIVAHr->>AIVAHr: Get Current Date Time
-    end
-    AIVAHr->>Ollama: Chat request (with tool outputs)
-    Ollama-->>AIVAHr: Final Response
-    AIVAHr->>User: Response
-```
-
-
