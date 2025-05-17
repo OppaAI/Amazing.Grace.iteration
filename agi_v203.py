@@ -34,7 +34,7 @@ async def llm_message(role: str, message: str):
    return {"role": role, "content": message}
 
 async def main():
-    print("🤖 Welcome to GRACE alpha test v.2.03-0516")
+    print("🤖 Welcome to AGi alpha test v.2.03-0516")
     print("")
 
     # Create an instance of the VisionSystem
